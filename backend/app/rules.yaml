@@ -1,0 +1,11 @@
+high_amount_threshold: 5000
+first_payment_weight: 25
+watchlist_hit_weight: 60
+name_mismatch_weight: 30
+channel_weights:
+  web: 10
+  mobile: 15
+  branch: 0
+cooloff_minutes: 30
+warn_threshold: 40
+hold_threshold: 70
