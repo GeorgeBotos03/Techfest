@@ -17,20 +17,36 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+
       - name: Install deps
         run: |
           pip install -r fraud-ai/requirements.txt
           pip install pip-audit
-      - name: Run detection
+
+      # === NON-BLOCKING pe PR ===
+      - name: Run detection (non-blocking on PR)
+        if: github.event_name == 'pull_request'
+        env:
+          ALERT_MIN_OUTLIERS: "1"
+        run: |
+          python fraud-ai/detect.py --input fraud-ai/data/transactions.csv --outdir fraud-ai/output --contamination 0.08 \
+          || echo "::warning ::Outliers detected (non-blocking on PR)"
+
+      # === BLOCKING pe push (pipeline eșuează dacă sunt outlieri) ===
+      - name: Run detection (blocking on push)
+        if: github.event_name == 'push'
         env:
           ALERT_MIN_OUTLIERS: "1"
         run: |
           python fraud-ai/detect.py --input fraud-ai/data/transactions.csv --outdir fraud-ai/output --contamination 0.08
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fraud-ai-reports
           path: fraud-ai/output/*
+
       - name: pip-audit
         run: pip-audit -r fraud-ai/requirements.txt
+
