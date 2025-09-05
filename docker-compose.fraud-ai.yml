@@ -1,0 +1,10 @@
+services:
+  fraud-ai:
+    build:
+      context: ./fraud-ai
+    image: techfest/fraud-ai:local
+    environment:
+      - ALERT_MIN_OUTLIERS=1
+    volumes:
+      - ./fraud-ai/output:/app/output
+    command: ["python","detect.py","--input","data/transactions.csv","--outdir","output","--contamination","0.08"]
