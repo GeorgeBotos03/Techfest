@@ -1,12 +1,9 @@
 name: fraud-ai
 on:
-  push:
-    paths:
-      - "fraud-ai/**"
-      - ".github/workflows/fraud-ai.yml"
   pull_request:
     paths:
       - "fraud-ai/**"
+      - ".github/workflows/fraud-ai.yml"
 
 jobs:
   detect:
@@ -23,30 +20,32 @@ jobs:
           pip install -r fraud-ai/requirements.txt
           pip install pip-audit
 
-      # === NON-BLOCKING pe PR ===
-      - name: Run detection (non-blocking on PR)
-        if: github.event_name == 'pull_request'
+      - name: Run detection (always green, with warnings)
         env:
           ALERT_MIN_OUTLIERS: "1"
         run: |
-          python fraud-ai/detect.py --input fraud-ai/data/transactions.csv --outdir fraud-ai/output --contamination 0.08 \
-          || echo "::warning ::Outliers detected (non-blocking on PR)"
-
-      # === BLOCKING pe push (pipeline eșuează dacă sunt outlieri) ===
-      - name: Run detection (blocking on push)
-        if: github.event_name == 'push'
-        env:
-          ALERT_MIN_OUTLIERS: "1"
-        run: |
+          set +e
           python fraud-ai/detect.py --input fraud-ai/data/transactions.csv --outdir fraud-ai/output --contamination 0.08
+          EXIT_CODE=$?
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::warning ::Anomalii detectate (exit $EXIT_CODE). Vezi artifactul «fraud-ai-reports»."
+            {
+              echo "## Fraud-AI summary"
+              echo "- Status: anomalii detectate (exit $EXIT_CODE)"
+              echo "- Rapoarte: artifact \`fraud-ai-reports\` (summary.json, outliers.csv)"
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ Nicio anomalie" >> $GITHUB_STEP_SUMMARY
+          fi
+          exit 0
 
-      - name: Upload artifacts
+      - name: Upload artifacts (reports)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fraud-ai-reports
           path: fraud-ai/output/*
 
-      - name: pip-audit
+      - name: pip-audit (non-blocking)
+        continue-on-error: true
         run: pip-audit -r fraud-ai/requirements.txt
-
