@@ -1,0 +1,36 @@
+name: fraud-ai
+on:
+  push:
+    paths:
+      - "fraud-ai/**"
+      - ".github/workflows/fraud-ai.yml"
+  pull_request:
+    paths:
+      - "fraud-ai/**"
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install deps
+        run: |
+          pip install -r fraud-ai/requirements.txt
+          pip install pip-audit
+      - name: Run detection
+        env:
+          ALERT_MIN_OUTLIERS: "1"
+        run: |
+          python fraud-ai/detect.py --input fraud-ai/data/transactions.csv --outdir fraud-ai/output --contamination 0.08
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fraud-ai-reports
+          path: fraud-ai/output/*
+      - name: pip-audit
+        run: pip-audit -r fraud-ai/requirements.txt
