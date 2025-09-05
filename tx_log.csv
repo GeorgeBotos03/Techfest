@@ -1,0 +1,27 @@
+ts,src_iban,dst_iban,amount,channel,first_to_payee,description,risk_score,action,reasons,cooloff
+2025-09-05T11:26:39.791263+00:00,RO12BANK0000000000000003,RO49AAAA1B31007593840000,477.59,web,False,payee: Albu,40.0,warn,Name/IBAN mismatch (simulated CoP) | CoP: Mismatch vs 'John Doe Investments SRL',0
+2025-09-05T11:26:40.294571+00:00,RO12BANK0000000000000001,RO49AAAA1B31007593840000,1077.63,web,True,payee: John Doe Investments SRL,35.0,allow,First payment to beneficiary,0
+2025-09-05T11:26:40.797563+00:00,RO12BANK0000000000000001,RO12BANK0000000000000001,1170.08,mobile,False,payee: John Doe Investments SRL,15.0,allow,MuleRadar risk=60,0
+2025-09-05T11:26:41.304763+00:00,RO12BANK0000000000000003,RO49AAAA1B31007593840000,301.85,mobile,True,payee: Cristea OC1,70.0,hold,First payment to beneficiary | Name/IBAN mismatch (simulated CoP) | CoP: Mismatch vs 'John Doe Investments SRL',30
+2025-09-05T11:26:41.807620+00:00,RO12BANK0000000000000001,RO12BANK0000000000000002,2390.06,branch,False,,0.0,allow,MuleRadar risk=60,0
+2025-09-05T11:26:42.310313+00:00,RO12BANK0000000000000003,RO12BANK0000000000000004,13042.65,web,True,,55.0,warn,High amount | First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:42.813182+00:00,RO12BANK0000000000000003,RO12BANK0000000000000001,410.15,branch,False,payee: Dobre,0.0,allow,MuleRadar risk=60,0
+2025-09-05T11:26:43.316461+00:00,RO12BANK0000000000000001,RO49AAAA1B31007593840000,14816.85,mobile,False,payee: John Doe Investments SRL,35.0,allow,High amount,0
+2025-09-05T11:26:43.819074+00:00,RO12BANK0000000000000002,RO12BANK0000000000000001,1848.07,mobile,True,payee: Ardelean,40.0,warn,First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:44.321756+00:00,RO12BANK0000000000000002,RO12BANK0000000000000003,13864.91,mobile,True,payee: Ene Aanei SRL,60.0,warn,High amount | First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:44.824256+00:00,RO12BANK0000000000000002,RO12BANK0000000000000002,2290.17,web,True,payee: Diaconescu SNC,35.0,allow,First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:45.330104+00:00,RO12BANK0000000000000002,RO12BANK0000000000000001,2181.96,web,True,payee: Niță Diaconescu RA,35.0,allow,First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:45.833333+00:00,RO12BANK0000000000000004,RO49AAAA1B31007593840000,138.27,branch,False,,30.0,allow,"Name/IBAN mismatch (simulated CoP) | CoP: Expected 'John Doe Investments SRL', but no name provided",0
+2025-09-05T11:26:46.337417+00:00,RO12BANK0000000000000004,RO49AAAA1B31007593840000,17405.34,mobile,False,,65.0,warn,"High amount | Name/IBAN mismatch (simulated CoP) | CoP: Expected 'John Doe Investments SRL', but no name provided",0
+2025-09-05T11:26:46.840235+00:00,RO12BANK0000000000000001,RO12BANK0000000000000002,9486.2,web,False,payee: John Doe Investments SRL,30.0,allow,High amount | MuleRadar risk=60,0
+2025-09-05T11:26:47.342841+00:00,RO12BANK0000000000000004,RO12BANK0000000000000002,190.94,mobile,True,payee: John Doe Investments SRL,40.0,warn,First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:47.848696+00:00,RO12BANK0000000000000003,RO12BANK0000000000000004,62.21,branch,False,payee: John Doe Investments SRL,0.0,allow,MuleRadar risk=60,0
+2025-09-05T11:26:48.351191+00:00,RO12BANK0000000000000003,RO49AAAA1B31007593840000,5369.55,branch,False,payee: Mocanu Nemeș SCA,50.0,warn,High amount | Name/IBAN mismatch (simulated CoP) | CoP: Mismatch vs 'John Doe Investments SRL',0
+2025-09-05T11:26:48.853978+00:00,RO12BANK0000000000000004,RO12BANK0000000000000001,15084.04,branch,True,,45.0,warn,High amount | First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:49.361386+00:00,RO12BANK0000000000000002,RO12BANK0000000000000003,985.76,branch,True,payee: Manole Georgescu SNC,25.0,allow,First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:49.864527+00:00,RO12BANK0000000000000001,RO12BANK0000000000000003,317.39,mobile,True,payee: John Doe Investments SRL,40.0,warn,First payment to beneficiary | MuleRadar risk=60,0
+2025-09-05T11:26:50.367474+00:00,RO12BANK0000000000000003,RO12BANK0000000000000001,1315.56,web,False,payee: John Doe Investments SRL,10.0,allow,MuleRadar risk=60,0
+2025-09-05T11:26:50.874202+00:00,RO12BANK0000000000000002,RO12BANK0000000000000002,740.4,web,False,payee: Tudor ASF,10.0,allow,MuleRadar risk=60,0
+2025-09-05T11:26:51.377163+00:00,RO12BANK0000000000000001,RO49AAAA1B31007593840000,2298.44,branch,False,payee: John Doe Investments SRL,0.0,allow,,0
+2025-09-05T11:26:51.884707+00:00,RO12BANK0000000000000004,RO12BANK0000000000000004,456.21,branch,False,payee: Mazilescu,0.0,allow,MuleRadar risk=60,0
+2025-09-05T11:26:52.391239+00:00,RO12BANK0000000000000003,RO12BANK0000000000000004,1868.96,mobile,True,payee: John Doe Investments SRL,40.0,warn,First payment to beneficiary | MuleRadar risk=60,0
