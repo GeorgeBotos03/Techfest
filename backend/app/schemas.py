@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
+from typing import Any
 
 class PaymentIn(BaseModel):
     ts: datetime
@@ -18,3 +19,14 @@ class ScoreOut(BaseModel):
     action: str  # allow|warn|hold
     reasons: List[str] = []
     cooloff_minutes: int = 0
+
+class AlertOut(BaseModel):
+    id: int
+    ts: datetime
+    src_account_iban: str | None = None
+    dst_account_iban: str | None = None
+    amount: float
+    currency: str
+    channel: str
+    action: str
+    reasons: list[str] = []
