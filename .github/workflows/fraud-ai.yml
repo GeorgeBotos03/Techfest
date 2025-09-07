@@ -1,5 +1,12 @@
 name: fraud-ai
 on:
+ integrate-fraud-ai
+  pull_request:
+    paths:
+      - "fraud-ai/**"
+      - ".github/workflows/fraud-ai.yml"
+
+ main
   pull_request:
     paths:
       - "fraud-ai/**"
@@ -8,8 +15,10 @@ on:
 jobs:
   detect:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -21,12 +30,34 @@ jobs:
           pip install pip-audit
 
       - name: Run detection (always green, with warnings)
+ integrate-fraud-ai
+        id: detect
+ main
         env:
           ALERT_MIN_OUTLIERS: "1"
         run: |
           set +e
           python fraud-ai/detect.py --input fraud-ai/data/transactions.csv --outdir fraud-ai/output --contamination 0.08
           EXIT_CODE=$?
+ integrate-fraud-ai
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::warning ::Anomalii detectate de model (exit $EXIT_CODE). Vezi artifactul «fraud-ai-reports»."
+            {
+              echo "## Fraud-AI summary"
+              echo ""
+              echo "- **Status:** anomalii detectate (exit $EXIT_CODE)"
+              echo "- **Rapoarte:** artifact \`fraud-ai-reports\` (summary.json, outliers.csv)"
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ Nicio anomalie; modelul a ieșit cu 0." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # forțăm succesul pasului
+          exit 0
+
+
           if [ "$EXIT_CODE" -ne 0 ]; then
             echo "::warning ::Anomalii detectate (exit $EXIT_CODE). Vezi artifactul «fraud-ai-reports»."
             {
@@ -39,6 +70,7 @@ jobs:
           fi
           exit 0
 
+ main
       - name: Upload artifacts (reports)
         if: always()
         uses: actions/upload-artifact@v4

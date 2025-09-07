@@ -26,3 +26,4 @@ htmlcov/
 
 # === Node / Frontend ===
 node
+.env
