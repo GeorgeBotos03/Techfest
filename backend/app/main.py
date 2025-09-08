@@ -1,12 +1,18 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
+from datetime import datetime, timezone
+import csv, io
+from fastapi.responses import StreamingResponse
+from fastapi import Query
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
-from app.schemas import PaymentIn, ScoreOut, AlertOut
+from app.schemas import PaymentIn, ScoreOut, AlertOut, QuizIn, QuizOut
+from app.services.quiz import score_quiz
+from app.services.watchlist import add_iban, remove_iban, list_ibans, is_watchlisted
 from app.services.scoring import score_payment
 from app.services.cop_check import confirmation_of_payee
 from app.services.mule_graph import update_graph, mule_risk
@@ -46,7 +52,8 @@ async def score_payment_endpoint(p: PaymentIn, db: Session = Depends(get_db)):
     # 2) Mule Radar (grafic)
     update_graph(p.src_account_iban, p.dst_account_iban, p.amount)
     mule_r = mule_risk(p.dst_account_iban)
-    on_watchlist = mule_r >= 80  # prag simplu
+    on_watchlist = is_watchlisted(p.dst_account_iban) or mule_r >= 80
+      # prag simplu
 
     # 3) Feature set pentru scor
     features = {
@@ -106,12 +113,34 @@ async def score_payment_endpoint(p: PaymentIn, db: Session = Depends(get_db)):
 # ---------- Alerts (list + decision) ----------
 
 @app.get("/alerts", response_model=List[AlertOut])
-def list_alerts(db: Session = Depends(get_db)):
-    # tranzacții cu acțiune != allow, cele mai noi primele
-    q = select(Transaction).where(Transaction.action != "allow").order_by(Transaction.id.desc()).limit(200)
+def list_alerts(
+    db: Session = Depends(get_db),
+    action: Optional[str] = Query(None, description="filter by action: warn|hold"),
+    dst_iban: Optional[str] = Query(None, description="filter by destination IBAN (contains)"),
+    since: Optional[str] = Query(None, description="ISO datetime, return alerts since this moment"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    q = select(Transaction).where(Transaction.action != "allow")
+
+    if action in {"warn", "hold"}:
+        q = q.where(Transaction.action == action)
+
+    if dst_iban:
+        q = q.where(Transaction.dst_iban.ilike(f"%{dst_iban}%"))
+
+    if since:
+        # acceptăm ISO 8601; dacă nu e valid, ignorăm
+        try:
+            ts = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            q = q.where(Transaction.ts >= ts)
+        except Exception:
+            pass
+
+    q = q.order_by(Transaction.id.desc()).offset(offset).limit(limit)
     rows = db.execute(q).scalars().all()
 
-    # mapare id->iban pentru conturi (doar dacă există)
+    # mapare id->iban
     account_ids = {r.src_account_id for r in rows if r.src_account_id} | {r.dst_account_id for r in rows if r.dst_account_id}
     id_to_iban = {}
     if account_ids:
@@ -132,7 +161,6 @@ def list_alerts(db: Session = Depends(get_db)):
             reasons=list(r.risk_reasons or []),
         ))
     return out
-
 
 @app.post("/alerts/{alert_id}/decision")
 def decide_alert(alert_id: int, decision: str, db: Session = Depends(get_db)):
@@ -162,3 +190,85 @@ def stats(db: Session = Depends(get_db)):
         "losses_prevented_RON": round(prevented_cents / 100.0, 2),
     }
     return resp
+
+# ---------- Dynamic Friction Quiz ----------
+@app.post("/quiz/{alert_id}", response_model=QuizOut)
+def quiz_decision(alert_id: int, q: QuizIn, db: Session = Depends(get_db)):
+    txn = db.query(Transaction).filter(Transaction.id == alert_id).one_or_none()
+    if not txn:
+        raise HTTPException(status_code=404, detail="alert not found")
+
+    prev = txn.action
+    score, decision, reasons = score_quiz(q)
+
+    # Mapăm decizia de quiz pe action-ul tranzacției
+    if decision == "release":
+        txn.action = "allow"
+    elif decision == "warn":
+        txn.action = "warn"
+    else:  # "cancel"
+        txn.action = "hold"
+
+    db.commit()
+    return QuizOut(id=int(txn.id), previous_action=prev, new_action=txn.action, score=score, reasons=reasons)
+
+
+# ---------- Watchlist admin ----------
+@app.get("/watchlist")
+def get_watchlist():
+    return {"ibans": list_ibans()}
+
+@app.post("/watchlist/add")
+def add_watchlist(iban: str):
+    add_iban(iban)
+    return {"ok": True, "ibans": list_ibans()}
+
+@app.post("/watchlist/remove")
+def remove_watchlist(iban: str):
+    remove_iban(iban)
+    return {"ok": True, "ibans": list_ibans()}
+
+@app.get("/alerts/export.csv")
+def export_alerts_csv(
+    db: Session = Depends(get_db),
+    action: Optional[str] = Query(None, description="warn|hold"),
+    since: Optional[str] = Query(None, description="ISO datetime"),
+):
+    q = select(Transaction).where(Transaction.action != "allow")
+    if action in {"warn", "hold"}:
+        q = q.where(Transaction.action == action)
+    if since:
+        try:
+            ts = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            q = q.where(Transaction.ts >= ts)
+        except Exception:
+            pass
+    q = q.order_by(Transaction.id.desc()).limit(10_000)
+    rows = db.execute(q).scalars().all()
+
+    # pregătim maparea IBAN
+    account_ids = {r.src_account_id for r in rows if r.src_account_id} | {r.dst_account_id for r in rows if r.dst_account_id}
+    id_to_iban = {}
+    if account_ids:
+        accts = db.query(Account).filter(Account.id.in_(account_ids)).all()
+        id_to_iban = {a.id: a.iban for a in accts}
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id","ts","src_iban","dst_iban","amount_RON","currency","channel","action","reasons"])
+    for r in rows:
+        w.writerow([
+            int(r.id),
+            r.ts.isoformat() if r.ts else "",
+            id_to_iban.get(r.src_account_id, ""),
+            r.dst_iban or id_to_iban.get(r.dst_account_id, ""),
+            f"{float(r.amount_cents)/100.0:.2f}",
+            r.currency,
+            r.channel,
+            r.action,
+            "; ".join(r.risk_reasons or []),
+        ])
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="text/csv", headers={
+        "Content-Disposition": 'attachment; filename="alerts.csv"'
+    })
