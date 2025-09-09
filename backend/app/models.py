@@ -1,9 +1,5 @@
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import (
-<<<<<<< HEAD
-    Column, Integer, String, BigInteger, TIMESTAMP, ForeignKey,
-    Boolean, JSON, Float, text
-=======
     Column,
     Integer,
     String,
@@ -14,7 +10,6 @@ from sqlalchemy import (
     JSON,
     Float,
     text,
->>>>>>> origin/main
 )
 
 Base = declarative_base()
@@ -37,10 +32,7 @@ class Account(Base):
 class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(BigInteger, primary_key=True)
-<<<<<<< HEAD
-=======
     # server_default NOW() ca fallback când nu trimitem ts
->>>>>>> origin/main
     ts = Column(TIMESTAMP, nullable=False, server_default=text("NOW()"))
     src_account_id = Column(Integer, ForeignKey("accounts.id"))
     dst_account_id = Column(Integer, nullable=True)
