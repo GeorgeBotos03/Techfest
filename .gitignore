@@ -29,4 +29,4 @@ node
 .env
 
 
-.ml_artifacts/
+.ml_artifacts/backend/app/ml/artifacts/
