@@ -1,11 +1,10 @@
 import argparse, json, os, sys
 import pandas as pd
 from sklearn.ensemble import IsolationForest
-import requests
-from datetime import datetime, timezone
 
 def load_data(path):
     df = pd.read_csv(path)
+    # feature engineering minimal
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     df['hour'] = df['timestamp'].dt.hour
     features = ['amount','ip_risk_score','hour']
@@ -16,35 +15,8 @@ def load_data(path):
 
 def run_iforest(X, contamination=0.08, random_state=42):
     model = IsolationForest(n_estimators=200, contamination=contamination, random_state=random_state)
-    scores = model.fit_predict(X)  # -1 = outlier, 1 = normal
+    scores = model.fit_predict(X)          # -1 = outlier, 1 = normal
     return scores
-
-def row_to_payment(row):
-    ts = row.get("timestamp")
-    try:
-        ts = pd.to_datetime(ts, errors="coerce").to_pydatetime().astimezone(timezone.utc).isoformat()
-    except Exception:
-        ts = datetime.now(timezone.utc).isoformat()
-
-    channel = str(row.get("channel", "web")).lower()
-    if channel not in {"web","mobile","branch"}:
-        channel = "web"
-
-    try:
-        uid = int(row.get("user_id", 0))
-    except Exception:
-        uid = 0
-
-    return {
-        "ts": ts,
-        "src_account_iban": f"RO12BANK000000000000{uid:04d}",
-        "dst_account_iban": "RO49AAAA1B31007593840000" if int(row.get("is_chargeback",0))==1 else "RO12BANK0000000000000001",
-        "amount": float(row.get("amount", 0.0)),
-        "currency": "RON",
-        "channel": channel,
-        "is_first_to_payee": True if int(row.get("is_chargeback",0))==1 else False,
-        "description": None,
-    }
 
 def main():
     p = argparse.ArgumentParser()
@@ -52,7 +24,6 @@ def main():
     p.add_argument("--outdir", default="fraud-ai/output")
     p.add_argument("--contamination", type=float, default=0.08)
     p.add_argument("--alert-min-outliers", type=int, default=int(os.getenv("ALERT_MIN_OUTLIERS", "1")))
-    p.add_argument("--post-to", default="", help="URL backend /scorePayment (ex: http://api:8000/scorePayment)")
     args = p.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -78,17 +49,8 @@ def main():
 
     print(json.dumps(summary, indent=2))
     print(f"[INFO] Outliers saved to: {out_csv}")
-
-    if args.post_to:
-        for _, r in outliers.iterrows():
-            payload = row_to_payment(r)
-            try:
-                resp = requests.post(args.post_to, json=payload, timeout=5)
-                print(f"[POST] {resp.status_code} -> {resp.text[:140]}")
-            except requests.RequestException as e:
-                print(f"[POST-ERR] {e}")
-
     if len(outliers) >= args.alert_min_outliers:
+        # non-zero ca să poți FAIL-ui pipeline-ul dacă vrei
         sys.exit(2)
 
 if __name__ == "__main__":
