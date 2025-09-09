@@ -45,14 +45,22 @@ async def _load_ml():
     try_load()
 
 # ---- CORS pentru Angular (4200) ----
+
+origins = [
+    "http://localhost:4200",
+    "http://127.0.0.1:4200",
+    "http://localhost:43901",
+    "http://127.0.0.1:43901",
+    "http://127.0.0.1:42105",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],  # sau explicit: ["Content-Type","Authorization"]
 )
-
 # ---------- Health / Root ----------
 @app.get("/")
 def root():
