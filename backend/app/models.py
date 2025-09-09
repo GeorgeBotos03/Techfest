@@ -1,10 +1,24 @@
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import (
+<<<<<<< HEAD
     Column, Integer, String, BigInteger, TIMESTAMP, ForeignKey,
     Boolean, JSON, Float, text
+=======
+    Column,
+    Integer,
+    String,
+    BigInteger,
+    TIMESTAMP,
+    ForeignKey,
+    Boolean,
+    JSON,
+    Float,
+    text,
+>>>>>>> origin/main
 )
 
 Base = declarative_base()
+
 
 class Customer(Base):
     __tablename__ = "customers"
@@ -12,15 +26,21 @@ class Customer(Base):
     external_id = Column(String(64), unique=True)
     name = Column(String)
 
+
 class Account(Base):
     __tablename__ = "accounts"
     id = Column(Integer, primary_key=True)
     customer_id = Column(Integer, ForeignKey("customers.id"))
     iban = Column(String(34), unique=True)
 
+
 class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(BigInteger, primary_key=True)
+<<<<<<< HEAD
+=======
+    # server_default NOW() ca fallback când nu trimitem ts
+>>>>>>> origin/main
     ts = Column(TIMESTAMP, nullable=False, server_default=text("NOW()"))
     src_account_id = Column(Integer, ForeignKey("accounts.id"))
     dst_account_id = Column(Integer, nullable=True)

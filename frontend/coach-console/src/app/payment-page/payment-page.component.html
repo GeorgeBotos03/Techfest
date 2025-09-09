@@ -1,0 +1,27 @@
+<h2>Coach – Simulare Plată</h2>
+<form [formGroup]="form" (ngSubmit)="submit()">
+    <label>IBAN sursă</label>
+    <input formControlName="src" />
+
+    <label>IBAN destinație</label>
+    <input formControlName="dst" />
+
+    <label>Sumă (RON)</label>
+    <input type="number" formControlName="amount" />
+
+    <label>Canal</label>
+    <select formControlName="channel">
+        <option value="web">web</option>
+        <option value="mobile">mobile</option>
+        <option value="branch">branch</option>
+    </select>
+
+    <label><input type="checkbox" formControlName="first" /> First-to-payee</label>
+
+    <label>Nume beneficiar (pentru CoP)</label>
+    <input formControlName="payee" />
+
+    <button type="submit">Score Payment</button>
+</form>
+
+<app-risk-banner *ngIf="result" [result]="result"></app-risk-banner>
