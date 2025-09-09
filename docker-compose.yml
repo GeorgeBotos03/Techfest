@@ -1,4 +1,4 @@
-version: "3.9"
+# version: "3.9"  # opțional; poate fi eliminată ca să nu mai apară warning-ul
 
 services:
   api:
@@ -6,14 +6,17 @@ services:
     container_name: anti-scam-api
     env_file:
       - .env
+    environment:
+      - ML_ART_DIR=/data/ml # artefacte ML persistente în volum
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - db
       - redis
     ports:
       - "8000:8000"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
-      - ./backend:/app
+      - ./backend:/app # codul backend montat în container
+      - ./ml_artifacts:/data/ml # 👈 artefacte model/vectorizer/meta persistă pe disc
 
   db:
     image: postgres:16
@@ -22,9 +25,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    # poți comenta portul dacă 5432 e ocupat; nu e necesar pt. demo
     ports:
-      - "5432:5432"
+      - "5432:5432" # poți comenta dacă e ocupat; nu e necesar pt. demo
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./backend/seed:/docker-entrypoint-initdb.d
@@ -32,39 +34,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: anti-scam-redis
-    # fără ports -> disponibil doar în rețeaua Compose (api îl vede ca 'redis:6379')
-  txgen:
-    build: ./fraud-ai
-    container_name: fraud-ai-txgen
-    depends_on:
-      - api
-    command: >
-      python realtime_tx_gen.py
-        --endpoint http://api:8000/scorePayment
-        --rate 1.0
-        --duration 0
-        --mule-prob 0.15
-        --risky-prob 0.30
-        --first-prob 0.50
-        --cop-match-prob 0.5
-    restart: unless-stopped
-
-  fraud-ai:
-    build:
-      context: ./fraud-ai
-      dockerfile: Dockerfile
-    container_name: fraud-ai-batch
-    depends_on:
-      - api
-    environment:
-      - ALERT_MIN_OUTLIERS=1
-    volumes:
-      - ./fraud-ai/output:/app/output
-    command: ["python","detect.py",
-              "--input","data/transactions.csv",
-              "--outdir","output",
-              "--contamination","0.08",
-              "--post-to","http://api:8000/scorePayment"]
+    # fără ports -> vizibil doar în rețeaua compose (api se conectează la 'redis:6379')
 
 volumes:
   pgdata:

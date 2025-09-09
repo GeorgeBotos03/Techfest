@@ -1,27 +1,50 @@
-from datetime import datetime
-from typing import List, Optional
+# -*- coding: utf-8 -*-
+from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import List, Optional, Dict
+
 import csv, io
-from fastapi.responses import StreamingResponse
-from fastapi import Query
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
+# ---- ML (status, train, predict) ----
+from app.ml.model import train_and_save, try_load, predict_proba_one, status as ml_status
+
+# ---- Schemas / services existente ----
 from app.schemas import PaymentIn, ScoreOut, AlertOut, QuizIn, QuizOut
 from app.services.quiz import score_quiz
 from app.services.watchlist import add_iban, remove_iban, list_ibans, is_watchlisted
 from app.services.scoring import score_payment
 from app.services.cop_check import confirmation_of_payee
-from app.services.mule_graph import update_graph, mule_risk
-from app.deps import get_db
+
+# ---- Mule Radar (nou) ----
+from app.services.mule import record_payment, stats_for_iban, top_suspects
+
+# ---- DB models / deps ----
 from app.models import Account, Transaction, Customer
+
+# get_db + get_redis (cu fallback dacă nu e implementat)
+try:
+    from app.deps import get_db, get_redis
+except Exception:
+    # avem get_db, dar poate nu e definit get_redis: furnizăm un fallback simplu
+    from app.deps import get_db  # type: ignore
+    import os, redis
+    def get_redis():
+        return redis.Redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"), decode_responses=True)
 
 app = FastAPI(title="Anti-Scam API")
 
-# CORS pentru Angular la 4200
+# ---- ML auto-load la startup ----
+@app.on_event("startup")
+async def _load_ml():
+    try_load()
+
+# ---- CORS pentru Angular (4200) ----
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"],
@@ -30,52 +53,91 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# ---------- Health / Root ----------
 @app.get("/")
 def root():
     return {"status": "ok", "health": "/health", "docs": "/docs"}
-
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "ts": datetime.utcnow().isoformat()}
 
-
+# ---------- Score Payment (reguli + ML + Mule Radar) ----------
 @app.post("/scorePayment", response_model=ScoreOut)
-async def score_payment_endpoint(p: PaymentIn, db: Session = Depends(get_db)):
-    # 1) CoP (confirmation of payee) – extrage nume din descriere "payee: <nume>"
+async def score_payment_endpoint(
+    p: PaymentIn,
+    db: Session = Depends(get_db),
+    r = Depends(get_redis),
+):
+    # 1) CoP (Confirmation of Payee) – extragem un nume din description dacă e cazul
     provided_name = None
     if p.description and "payee:" in p.description.lower():
         provided_name = p.description.split(":", 1)[1].strip()
     cop_ok, cop_msg = await confirmation_of_payee(p.dst_account_iban, provided_name)
 
-    # 2) Mule Radar (grafic)
-    update_graph(p.src_account_iban, p.dst_account_iban, p.amount)
-    mule_r = mule_risk(p.dst_account_iban)
-    on_watchlist = is_watchlisted(p.dst_account_iban) or mule_r >= 80
-      # prag simplu
+    # 2) Mule Radar – înregistrăm tranzacția în graf (fan-in/out) și citim scorul curent
+    try:
+        record_payment(r, ts_iso=p.ts, src_iban=p.src_account_iban, dst_iban=p.dst_account_iban)
+    except Exception:
+        # nu blocăm flow-ul dacă Redis are probleme
+        pass
 
-    # 3) Feature set pentru scor
-    features = {
+    mule_stats = {}
+    mule_r = 0
+    try:
+        mule_stats = stats_for_iban(r, p.dst_account_iban, hours=24)
+        mule_r = int(mule_stats.get("mule_score", 0))
+    except Exception:
+        mule_r = 0
+
+    # Watchlist dinamic pe baza Mule Radar + watchlist manual
+    on_watchlist = is_watchlisted(p.dst_account_iban) or mule_r >= 80  # prag simplu pentru demo
+
+    # 3) Features pentru scorare pe reguli
+    features: Dict = {
         "amount": p.amount,
         "channel": p.channel,
         "is_first_to_payee": p.is_first_to_payee,
         "description": p.description,
-        "src_iban": p.src_account_iban,   # pentru velocity
-        "dst_iban": p.dst_account_iban,   # pentru velocity
+        "src_iban": p.src_account_iban,
+        "dst_iban": p.dst_account_iban,
     }
 
-    # 4) Scorare pe reguli + semnale scam (text + velocity)
+    # 4) Scorare pe reguli + semnale
     score, action, reasons, cooloff = score_payment(features, cop_ok, on_watchlist)
 
     if not cop_ok:
         reasons.append(f"CoP: {cop_msg}")
     if mule_r >= 60:
         reasons.append(f"MuleRadar risk={mule_r}")
-    if on_watchlist:
+    if on_watchlist and "Beneficiary on watchlist" not in reasons:
         reasons.append("Beneficiary on watchlist")
 
-    # 5) Persistență minimă
+    # 5) Integrare ML (dacă modelul e încărcat)
+    try:
+        ml_row = {
+            "amount": features.get("amount", 0.0),
+            "is_first_to_payee": bool(features.get("is_first_to_payee")),
+            "channel": features.get("channel", "web"),
+            "description": features.get("description") or "",
+        }
+        ml_p = predict_proba_one(ml_row)  # None dacă nu e încărcat
+        if ml_p is not None:
+            reasons.append(f"ML: p_scam={ml_p:.2f}")
+            rule_norm = min(float(score) / 100.0, 1.0)
+            final = 100.0 * (0.6 * rule_norm + 0.4 * ml_p)
+            score = float(final)
+            if score >= 60:
+                action, cooloff = "hold", 30
+            elif score >= 30:
+                action, cooloff = "warn", 15
+            else:
+                action, cooloff = "allow", 0
+    except NameError:
+        # dacă nu avem importul predict_proba_one, ignorăm ML
+        pass
+
+    # 6) Persistență minimă a tranzacției
     src_acct = db.query(Account).filter(Account.iban == p.src_account_iban).one_or_none()
     if not src_acct:
         cust = db.query(Customer).filter(Customer.external_id == "demo").one_or_none()
@@ -109,9 +171,7 @@ async def score_payment_endpoint(p: PaymentIn, db: Session = Depends(get_db)):
 
     return ScoreOut(risk_score=score, action=action, reasons=reasons, cooloff_minutes=cooloff)
 
-
 # ---------- Alerts (list + decision) ----------
-
 @app.get("/alerts", response_model=List[AlertOut])
 def list_alerts(
     db: Session = Depends(get_db),
@@ -130,7 +190,6 @@ def list_alerts(
         q = q.where(Transaction.dst_iban.ilike(f"%{dst_iban}%"))
 
     if since:
-        # acceptăm ISO 8601; dacă nu e valid, ignorăm
         try:
             ts = datetime.fromisoformat(since.replace("Z", "+00:00"))
             q = q.where(Transaction.ts >= ts)
@@ -140,9 +199,9 @@ def list_alerts(
     q = q.order_by(Transaction.id.desc()).offset(offset).limit(limit)
     rows = db.execute(q).scalars().all()
 
-    # mapare id->iban
+    # mapare id -> IBAN
     account_ids = {r.src_account_id for r in rows if r.src_account_id} | {r.dst_account_id for r in rows if r.dst_account_id}
-    id_to_iban = {}
+    id_to_iban: Dict[int, str] = {}
     if account_ids:
         accts = db.query(Account).filter(Account.id.in_(account_ids)).all()
         id_to_iban = {a.id: a.iban for a in accts}
@@ -173,9 +232,7 @@ def decide_alert(alert_id: int, decision: str, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True, "id": alert_id, "new_action": txn.action}
 
-
-# ---------- Stats pentru demo ----------
-
+# ---------- Stats ----------
 @app.get("/stats")
 def stats(db: Session = Depends(get_db)):
     total = db.query(func.count(Transaction.id)).scalar() or 0
@@ -201,7 +258,6 @@ def quiz_decision(alert_id: int, q: QuizIn, db: Session = Depends(get_db)):
     prev = txn.action
     score, decision, reasons = score_quiz(q)
 
-    # Mapăm decizia de quiz pe action-ul tranzacției
     if decision == "release":
         txn.action = "allow"
     elif decision == "warn":
@@ -211,7 +267,6 @@ def quiz_decision(alert_id: int, q: QuizIn, db: Session = Depends(get_db)):
 
     db.commit()
     return QuizOut(id=int(txn.id), previous_action=prev, new_action=txn.action, score=score, reasons=reasons)
-
 
 # ---------- Watchlist admin ----------
 @app.get("/watchlist")
@@ -228,6 +283,7 @@ def remove_watchlist(iban: str):
     remove_iban(iban)
     return {"ok": True, "ibans": list_ibans()}
 
+# ---------- Alerts export CSV ----------
 @app.get("/alerts/export.csv")
 def export_alerts_csv(
     db: Session = Depends(get_db),
@@ -246,9 +302,9 @@ def export_alerts_csv(
     q = q.order_by(Transaction.id.desc()).limit(10_000)
     rows = db.execute(q).scalars().all()
 
-    # pregătim maparea IBAN
+    # mapare IBAN
     account_ids = {r.src_account_id for r in rows if r.src_account_id} | {r.dst_account_id for r in rows if r.dst_account_id}
-    id_to_iban = {}
+    id_to_iban: Dict[int, str] = {}
     if account_ids:
         accts = db.query(Account).filter(Account.id.in_(account_ids)).all()
         id_to_iban = {a.id: a.iban for a in accts}
@@ -272,3 +328,28 @@ def export_alerts_csv(
     return StreamingResponse(buf, media_type="text/csv", headers={
         "Content-Disposition": 'attachment; filename="alerts.csv"'
     })
+
+# ---------- ML endpoints ----------
+@app.post("/ml/train")
+def ml_train(n: int = Query(3000, ge=500, le=50000), scam_ratio: float = Query(0.5, ge=0.1, le=0.9), seed: int = 42):
+    meta = train_and_save(n=n, scam_ratio=scam_ratio, seed=seed)
+    return {"ok": True, "meta": meta}
+
+@app.get("/ml/status")
+def ml_status_route():
+    return ml_status()
+
+# ---------- Mule Radar endpoints ----------
+@app.get("/mule/{iban}")
+def mule_one(iban: str, hours: int = Query(24, ge=1, le=168), r = Depends(get_redis)):
+    """
+    Statistici Mule pentru un IBAN (ultimele `hours` ore).
+    """
+    return stats_for_iban(r, iban, hours=hours)
+
+@app.get("/mule/top")
+def mule_top(hours: int = Query(24, ge=1, le=168), limit: int = Query(10, ge=1, le=50), r = Depends(get_redis)):
+    """
+    Top IBAN-uri suspecte ca destinație în fereastra recentă.
+    """
+    return top_suspects(r, hours=hours, limit=limit)

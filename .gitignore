@@ -27,3 +27,6 @@ htmlcov/
 # === Node / Frontend ===
 node
 .env
+
+
+.ml_artifacts/
