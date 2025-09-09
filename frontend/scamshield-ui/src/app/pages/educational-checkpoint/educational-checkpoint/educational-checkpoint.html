@@ -1,0 +1,56 @@
+<div class="grid" style="grid-template-columns: 2fr 1fr;">
+<section class="card">
+<div class="card-title">Educational Checkpoint</div>
+
+
+<div class="grid" style="grid-template-columns: 1.2fr 1fr; gap:16px;">
+<div class="box">
+<div class="card-sub">Risk Assessment</div>
+<div class="progress"><span [style.width.%]="score"></span></div>
+<div class="card-sub" style="margin-top:6px;">{{score}}% Risk Score</div>
+
+
+<div class="separator"></div>
+<div class="card-sub">Scam Awareness Tips — International Transfers</div>
+<ul class="list" style="margin:0;padding:0;list-style:none;">
+<li class="item"><div class="dot"></div><div>Verify the recipient's identity through official channels.</div></li>
+<li class="item"><div class="dot"></div><div>Be cautious of investment opportunities promising unusually high returns.</div></li>
+<li class="item"><div class="dot"></div><div>Once sent, international wire transfers are hard to reverse.</div></li>
+</ul>
+</div>
+
+
+<div class="box">
+<div class="card-sub">Verification Checklist</div>
+<div class="list">
+<label class="item" *ngFor="let i of items">
+<input type="checkbox" [(ngModel)]="i.checked" style="margin-top:3px;"/>
+<div>{{i.label}}</div>
+</label>
+</div>
+</div>
+</div>
+
+
+<div class="separator"></div>
+<div style="display:flex;gap:8px;">
+<a class="btn ghost" routerLink="/security-check">Back</a>
+<a class="btn primary" [class.disabled]="!allChecked()" [attr.aria-disabled]="!allChecked()" routerLink="/enhanced">Continue</a>
+</div>
+</section>
+
+
+<aside class="card">
+<div class="card-title">Did You Know?</div>
+<div class="help">Invoice fraud accounts for ~27% of business payment scams. Always verify new payment requests through an independent channel.</div>
+
+
+<div class="separator"></div>
+<div class="card-title">Red Flags</div>
+<ul class="list" style="margin:0;padding:0;list-style:none;">
+<li class="item"><div class="dot"></div><div>First-time international transfer</div></li>
+<li class="item"><div class="dot"></div><div>Amount exceeds typical range</div></li>
+<li class="item"><div class="dot"></div><div>Recipient company has limited online presence</div></li>
+</ul>
+</aside>
+</div>

@@ -1,0 +1,75 @@
+<div class="grid" data-layout="2-1" style="grid-template-columns: 2fr 1fr;">
+<section class="card">
+<div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+<div>Transaction Security Check</div>
+<risk-chip [level]="assessment.overall">High Risk</risk-chip>
+</div>
+
+
+<div class="grid" style="grid-template-columns: 1.2fr 1fr; gap:16px;">
+<div class="box">
+<div class="card-sub">Transaction Details</div>
+<div class="kv"><div class="label">From</div><div>{{tx.fromAccount}}</div></div>
+<div class="kv"><div class="label">To</div><div>{{tx.toRecipient}} <span class="help" *ngIf="recipient.reputation==='unverified'">Unverified recipient</span></div></div>
+<div class="kv"><div class="label">Amount</div><div>${{tx.amount | number:'1.0-2'}} {{tx.currency}}</div></div>
+<div class="kv"><div class="label">Reference</div><div>{{tx.reference}}</div></div>
+<div class="kv"><div class="label">Type</div><div>{{tx.type | titlecase}}</div></div>
+<div class="kv"><div class="label">When</div><div>{{tx.date | date:'medium'}}</div></div>
+<div class="kv"><div class="label">Device & Location</div><div>{{tx.device}} — {{tx.location}}</div></div>
+</div>
+
+
+<div class="box">
+<div class="card-sub">AI Risk Assessment</div>
+<div class="list">
+<div class="item" *ngFor="let r of assessment.reasons">
+<div class="dot"></div>
+<div><strong>{{r.title}}</strong><div class="card-sub">{{r.desc}}</div></div>
+</div>
+</div>
+</div>
+</div>
+
+
+<div class="separator"></div>
+
+
+<div class="grid" style="grid-template-columns: 1.2fr 1fr; gap:16px;">
+<div class="box">
+<div class="card-sub">Transaction Pattern</div>
+<mini-line [values]="pattern.history"></mini-line>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px;">
+<div class="help">Avg: ${{pattern.typicalAvg}}</div>
+<div class="help">Largest Prev: ${{pattern.largest}}</div>
+<div class="help">Current: ${{pattern.current}}</div>
+</div>
+</div>
+
+
+<div class="box">
+<div class="card-sub">ScamShield Protection</div>
+<div class="list">
+<div class="item"><div class="dot"></div><div>Real-time transaction monitoring</div></div>
+<div class="item"><div class="dot"></div><div>Recipient verification</div></div>
+<div class="item"><div class="dot"></div><div>Refund eligibility review</div></div>
+</div>
+<div style="margin-top:12px;display:flex;gap:8px;">
+<a class="btn ghost" routerLink="/educational">Continue</a>
+<button class="btn">View Detailed Analysis</button>
+</div>
+</div>
+</div>
+</section>
+
+
+<aside class="card">
+<div class="card-title">Recipient Information</div>
+<div class="kv"><div class="label">Name</div><div>{{recipient.name}}</div></div>
+<div class="kv"><div class="label">CUI</div><div>{{recipient.cui}}</div></div>
+<div class="kv"><div class="label">Address</div><div>{{recipient.address}}</div></div>
+<div class="kv"><div class="label">Incorporated</div><div>{{recipient.incorporated | date}}</div></div>
+<div class="kv"><div class="label">Reputation</div><div><span class="badge med">Unverified Business</span></div></div>
+<div class="separator"></div>
+<div class="help">This recipient has characteristics common to invoice scams.</div>
+</aside>
+</div>

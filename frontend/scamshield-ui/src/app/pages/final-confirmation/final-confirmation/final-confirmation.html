@@ -1,0 +1,54 @@
+<div class="grid" style="grid-template-columns: 2fr 1fr;">
+<section class="card">
+<div class="card-title">Final Confirmation</div>
+
+
+<div class="grid" style="grid-template-columns: 1.2fr 1fr; gap:16px;">
+<div class="box">
+<div class="card-sub">Transaction Summary</div>
+<div class="kv"><div class="label">From</div><div>{{tx.fromAccount}}</div></div>
+<div class="kv"><div class="label">To</div><div>{{tx.toRecipient}}</div></div>
+<div class="kv"><div class="label">Amount</div><div>${{tx.amount}} {{tx.currency}}</div></div>
+<div class="kv"><div class="label">Purpose</div><div>{{tx.reference}}</div></div>
+</div>
+
+
+<div class="box">
+<div class="card-sub">Risk Assessment</div>
+<risk-chip [level]="level">Medium Risk</risk-chip>
+<div class="list" style="margin-top:8px;">
+<div class="item" *ngFor="let r of reasons">
+<div class="dot"></div><div><strong>{{r.title}}</strong><div class="card-sub">{{r.desc}}</div></div>
+</div>
+</div>
+</div>
+</div>
+
+
+<div class="separator"></div>
+<label style="display:flex;gap:10px;align-items:center;">
+<input type="checkbox" [(ngModel)]="confirmed"/> <div>I understand the risks and confirm that I want to proceed.</div>
+</label>
+
+
+<div style="margin-top:12px;display:flex;gap:8px;">
+<a class="btn ghost" routerLink="/enhanced">Back</a>
+<button class="btn primary" [disabled]="!confirmed">Confirm & Process Payment</button>
+</div>
+</section>
+
+
+<aside class="card">
+<div class="card-title">Protection Status</div>
+<div class="help">Your transaction is protected by ScamShield monitoring and refund review.</div>
+<div class="separator"></div>
+<div class="card-title">Timeline</div>
+<ul class="list" style="margin:0;padding:0;list-style:none;">
+<li class="item"><div class="dot"></div><div>Payment initiated</div></li>
+<li class="item"><div class="dot"></div><div>Scam detection completed</div></li>
+<li class="item"><div class="dot"></div><div>Educational checkpoint</div></li>
+<li class="item"><div class="dot"></div><div>Enhanced verification</div></li>
+<li class="item"><div class="dot"></div><div>Final confirmation</div></li>
+</ul>
+</aside>
+</div>

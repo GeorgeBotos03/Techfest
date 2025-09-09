@@ -1,0 +1,70 @@
+<div class="grid" style="grid-template-columns: 2fr 1fr;">
+<section class="card">
+<div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+<div>Enhanced Verification Required</div>
+<span class="badge high">High Risk Transaction</span>
+</div>
+
+
+<div class="grid" style="grid-template-columns: 1.2fr 1fr; gap:16px;">
+<div class="box">
+<div class="card-sub">Transaction Details</div>
+<div class="kv"><div class="label">Recipient</div><div>{{tx.toRecipient}}</div></div>
+<div class="kv"><div class="label">Amount</div><div>${{tx.amount}} {{tx.currency}}</div></div>
+<div class="kv"><div class="label">Payment Method</div><div>Wire Transfer</div></div>
+<div class="kv"><div class="label">Why extra verification?</div><div>AI detected multiple risk factors not matching your usual patterns.</div></div>
+</div>
+
+
+<div class="box">
+<div class="card-sub">Complete Verification</div>
+<div class="list">
+<label class="item"><input type="radio" name="m" (change)="method='qa'" checked/> <div>Answer Security Questions</div></label>
+<label class="item"><input type="radio" name="m" (change)="method='sms'"/> <div>SMS One-Time Password</div></label>
+<label class="item"><input type="radio" name="m" (change)="method='email'"/> <div>Email One-Time Password</div></label>
+<label class="item"><input type="radio" name="m" (change)="method='video'"/> <div>Voice / Video Verification</div></label>
+</div>
+<div style="margin-top:12px;display:flex;gap:8px;">
+<button class="btn primary">Continue Verification</button>
+<a class="btn ghost" routerLink="/educational">Back</a>
+</div>
+</div>
+</div>
+
+
+<div class="separator"></div>
+<div class="grid" style="grid-template-columns: 1fr 1fr; gap:16px;">
+<div class="box">
+<div class="card-sub">Additional Security Options</div>
+<div style="display:grid;gap:10px;">
+<div class="kv"><div class="label">Cooling-off Period</div>
+<div>
+<select class="btn" [(ngModel)]="delay">
+<option [ngValue]="12">12 hours</option>
+<option [ngValue]="24">24 hours</option>
+<option [ngValue]="48">48 hours</option>
+</select>
+</div>
+</div>
+<div class="kv"><div class="label">Notify Trusted Contact</div><div><button class="btn">Notify Sarah (spouse)</button></div></div>
+</div>
+</div>
+
+
+<div class="box">
+<div class="card-sub">Risk Assessment</div>
+<risk-bars [data]="bars"></risk-bars>
+</div>
+</div>
+</section>
+
+
+<aside class="card">
+<div class="card-title">Help & Support</div>
+<div class="help">If you’re unsure, schedule a delay to review or call our fraud line.</div>
+<div style="margin-top:12px;display:flex;gap:8px;">
+<a class="btn ghost" routerLink="/security-check">Cancel</a>
+<a class="btn primary" routerLink="/final">Continue to Confirmation</a>
+</div>
+</aside>
+</div>
