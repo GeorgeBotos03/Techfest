@@ -1,12 +1,14 @@
+// src/app/app.ts
 import { Component, signal } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
+import { ChatWidget } from './ui/chat-widget/chat-widget/chat-widget'; // ⬅️ importă componenta
 
 @Component({
   selector: 'app-root',
   standalone: true,
-   imports: [RouterOutlet, RouterLink],
+  imports: [RouterOutlet, RouterLink, ChatWidget], // ⬅️ adaugă aici
   template: `
- <main class="main">
+    <main class="main">
       <div class="container">
         <header style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
           <h1 style="margin:0;font-size:22px;">ScamShield</h1>
@@ -18,6 +20,7 @@ import { RouterLink, RouterOutlet } from '@angular/router';
           </nav>
         </header>
         <router-outlet/>
+        <chat-widget></chat-widget>
       </div>
     </main>
   `

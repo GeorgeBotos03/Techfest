@@ -1,0 +1,32 @@
+<!-- Floating button -->
+<button class="chat-toggle" (click)="toggle()">💬</button>
+
+<!-- Chat panel -->
+<div class="chat-panel" *ngIf="open()">
+  <header class="hdr">
+    <span>ScamShield Assistant</span>
+    <button class="close" (click)="toggle()">×</button>
+  </header>
+
+  <div class="body">
+    <div *ngFor="let m of msgs()" class="msg" [class.user]="m.role==='user'">
+      <div class="bubble">{{ m.text }}</div>
+    </div>
+    <div *ngIf="sending()" class="msg assistant">
+      <div class="bubble typing">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="composer">
+    <!-- one-way bind + signals; pass raw $event and cast in TS -->
+    <textarea
+      [ngModel]="input()"
+      (ngModelChange)="input.set($event)"
+      (keydown.enter)="onEnter($event)"
+      placeholder="Scrie un mesaj…"
+    ></textarea>
+    <button (click)="send()" [disabled]="sending()">➤</button>
+  </footer>
+</div>
