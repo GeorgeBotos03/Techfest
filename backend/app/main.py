@@ -1,46 +1,50 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional, Dict
 
-from fastapi import Body
-from app.services.ai_explain import ai_explain as _ai_explain
-from app.services.ai_quiz import generate_quiz, score_quiz_llm
-from app.services.ai_classify import classify_payment
-
-import csv, io
-from fastapi import FastAPI, Depends, HTTPException, Query
+import csv
+import io
+from fastapi import FastAPI, Depends, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 from sqlalchemy import select, func
+from sqlalchemy.orm import Session
 
 # ---- ML (status, train, predict) ----
 from app.ml.model import train_and_save, try_load, predict_proba_one, status as ml_status
 
-# ---- Schemas / services existente ----
+# ---- Schemas / services ----
 from app.schemas import PaymentIn, ScoreOut, AlertOut, QuizIn, QuizOut
 from app.services.quiz import score_quiz
 from app.services.watchlist import add_iban, remove_iban, list_ibans, is_watchlisted
 from app.services.scoring import score_payment
 from app.services.cop_check import confirmation_of_payee
 
-# ---- Mule Radar (nou) ----
+# ---- Mule Radar (Redis) ----
 from app.services.mule import record_payment, stats_for_iban, top_suspects
 
 # ---- DB models / deps ----
 from app.models import Account, Transaction, Customer
 
-# get_db + get_redis (cu fallback dacă nu e implementat)
+# ---- AI services ----
+from app.services.ai_explain import ai_explain as _ai_explain
+from app.services.ai_quiz import generate_quiz, score_quiz_llm
+from app.services.ai_classify import classify_payment
+
+# get_db + get_redis (fallback dacă lipsește în deps.py)
 try:
     from app.deps import get_db, get_redis
-except Exception:
-    # avem get_db, dar poate nu e definit get_redis: furnizăm un fallback simplu
+except Exception:  # pragma: no cover
     from app.deps import get_db  # type: ignore
     import os, redis
+
     def get_redis():
-        return redis.Redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379/0"), decode_responses=True)
+        return redis.Redis.from_url(
+            os.getenv("REDIS_URL", "redis://redis:6379/0"),
+            decode_responses=True
+        )
 
 app = FastAPI(title="Anti-Scam API")
 
@@ -49,8 +53,7 @@ app = FastAPI(title="Anti-Scam API")
 async def _load_ml():
     try_load()
 
-# ---- CORS pentru Angular (4200) ----
-
+# ---- CORS ----
 origins = [
     "http://localhost:4200",
     "http://127.0.0.1:4200",
@@ -58,14 +61,14 @@ origins = [
     "http://127.0.0.1:43901",
     "http://127.0.0.1:42105",
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],  # sau explicit: ["Content-Type","Authorization"]
+    allow_headers=["*"],
 )
+
 # ---------- Health / Root ----------
 @app.get("/")
 def root():
@@ -82,20 +85,18 @@ async def score_payment_endpoint(
     db: Session = Depends(get_db),
     r = Depends(get_redis),
 ):
-    # 1) CoP (Confirmation of Payee) – extragem un nume din description dacă e cazul
+    # 1) CoP
     provided_name = None
     if p.description and "payee:" in p.description.lower():
         provided_name = p.description.split(":", 1)[1].strip()
     cop_ok, cop_msg = await confirmation_of_payee(p.dst_account_iban, provided_name)
 
-    # 2) Mule Radar – înregistrăm tranzacția în graf (fan-in/out) și citim scorul curent
+    # 2) Mule Radar (înregistrare + scor)
     try:
         record_payment(r, ts_iso=p.ts, src_iban=p.src_account_iban, dst_iban=p.dst_account_iban)
     except Exception:
-        # nu blocăm flow-ul dacă Redis are probleme
-        pass
+        pass  # nu blocăm flow-ul dacă Redis nu răspunde
 
-    mule_stats = {}
     mule_r = 0
     try:
         mule_stats = stats_for_iban(r, p.dst_account_iban, hours=24)
@@ -103,10 +104,9 @@ async def score_payment_endpoint(
     except Exception:
         mule_r = 0
 
-    # Watchlist dinamic pe baza Mule Radar + watchlist manual
-    on_watchlist = is_watchlisted(p.dst_account_iban) or mule_r >= 80  # prag simplu pentru demo
+    on_watchlist = is_watchlisted(p.dst_account_iban) or mule_r >= 80
 
-    # 3) Features pentru scorare pe reguli
+    # 3) Features
     features: Dict = {
         "amount": p.amount,
         "channel": p.channel,
@@ -116,9 +116,8 @@ async def score_payment_endpoint(
         "dst_iban": p.dst_account_iban,
     }
 
-    # 4) Scorare pe reguli + semnale
+    # 4) Reguli + semnale
     score, action, reasons, cooloff = score_payment(features, cop_ok, on_watchlist)
-
     if not cop_ok:
         reasons.append(f"CoP: {cop_msg}")
     if mule_r >= 60:
@@ -126,7 +125,7 @@ async def score_payment_endpoint(
     if on_watchlist and "Beneficiary on watchlist" not in reasons:
         reasons.append("Beneficiary on watchlist")
 
-    # 5) Integrare ML (dacă modelul e încărcat)
+    # 5) ML (dacă e disponibil modelul)
     try:
         ml_row = {
             "amount": features.get("amount", 0.0),
@@ -147,10 +146,9 @@ async def score_payment_endpoint(
             else:
                 action, cooloff = "allow", 0
     except NameError:
-        # dacă nu avem importul predict_proba_one, ignorăm ML
         pass
 
-    # 6) Persistență minimă a tranzacției
+    # 6) Persistență tranzacție (demo)
     src_acct = db.query(Account).filter(Account.iban == p.src_account_iban).one_or_none()
     if not src_acct:
         cust = db.query(Customer).filter(Customer.external_id == "demo").one_or_none()
@@ -188,20 +186,17 @@ async def score_payment_endpoint(
 @app.get("/alerts", response_model=List[AlertOut])
 def list_alerts(
     db: Session = Depends(get_db),
-    action: Optional[str] = Query(None, description="filter by action: warn|hold"),
-    dst_iban: Optional[str] = Query(None, description="filter by destination IBAN (contains)"),
-    since: Optional[str] = Query(None, description="ISO datetime, return alerts since this moment"),
+    action: Optional[str] = Query(None, description="warn|hold"),
+    dst_iban: Optional[str] = Query(None, description="destination IBAN (contains)"),
+    since: Optional[str] = Query(None, description="ISO datetime"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     q = select(Transaction).where(Transaction.action != "allow")
-
     if action in {"warn", "hold"}:
         q = q.where(Transaction.action == action)
-
     if dst_iban:
         q = q.where(Transaction.dst_iban.ilike(f"%{dst_iban}%"))
-
     if since:
         try:
             ts = datetime.fromisoformat(since.replace("Z", "+00:00"))
@@ -212,7 +207,6 @@ def list_alerts(
     q = q.order_by(Transaction.id.desc()).offset(offset).limit(limit)
     rows = db.execute(q).scalars().all()
 
-    # mapare id -> IBAN
     account_ids = {r.src_account_id for r in rows if r.src_account_id} | {r.dst_account_id for r in rows if r.dst_account_id}
     id_to_iban: Dict[int, str] = {}
     if account_ids:
@@ -253,13 +247,12 @@ def stats(db: Session = Depends(get_db)):
     prevented_cents = db.query(func.coalesce(func.sum(Transaction.amount_cents), 0)) \
                         .filter(Transaction.action == "hold").scalar() or 0
 
-    resp = {
+    return {
         "total_tx": int(total),
         "by_action": {k: int(v) for k, v in by_action.items()},
         "percent": {k: (int(v) / total * 100.0 if total else 0.0) for k, v in by_action.items()},
         "losses_prevented_RON": round(prevented_cents / 100.0, 2),
     }
-    return resp
 
 # ---------- Dynamic Friction Quiz ----------
 @app.post("/quiz/{alert_id}", response_model=QuizOut)
@@ -275,7 +268,7 @@ def quiz_decision(alert_id: int, q: QuizIn, db: Session = Depends(get_db)):
         txn.action = "allow"
     elif decision == "warn":
         txn.action = "warn"
-    else:  # "cancel"
+    else:
         txn.action = "hold"
 
     db.commit()
@@ -315,7 +308,6 @@ def export_alerts_csv(
     q = q.order_by(Transaction.id.desc()).limit(10_000)
     rows = db.execute(q).scalars().all()
 
-    # mapare IBAN
     account_ids = {r.src_account_id for r in rows if r.src_account_id} | {r.dst_account_id for r in rows if r.dst_account_id}
     id_to_iban: Dict[int, str] = {}
     if account_ids:
@@ -355,19 +347,13 @@ def ml_status_route():
 # ---------- Mule Radar endpoints ----------
 @app.get("/mule/{iban}")
 def mule_one(iban: str, hours: int = Query(24, ge=1, le=168), r = Depends(get_redis)):
-    """
-    Statistici Mule pentru un IBAN (ultimele `hours` ore).
-    """
     return stats_for_iban(r, iban, hours=hours)
 
 @app.get("/mule/top")
 def mule_top(hours: int = Query(24, ge=1, le=168), limit: int = Query(10, ge=1, le=50), r = Depends(get_redis)):
-    """
-    Top IBAN-uri suspecte ca destinație în fereastra recentă.
-    """
     return top_suspects(r, hours=hours, limit=limit)
 
-
+# ---------- AI endpoints ----------
 @app.post("/ai/explain")
 def ai_explain_endpoint(payload: dict = Body(...)):
     features = payload.get("features", {})
@@ -376,9 +362,7 @@ def ai_explain_endpoint(payload: dict = Body(...)):
 
 @app.post("/ai/quiz")
 def ai_quiz(payload: dict = Body(...)):
-    # payload poate conține signals (din scorePayment / mule / etc.)
-    signals = payload.get("signals", {})
-    return generate_quiz(signals)
+    return generate_quiz(payload.get("signals", {}))
 
 @app.post("/ai/quiz/score")
 def ai_quiz_score(payload: dict = Body(...)):
