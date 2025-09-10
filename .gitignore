@@ -1,5 +1,6 @@
 # === Project outputs ===
 fraud-ai/output/
+ml_artifacts/
 
 # === OS ===
 .DS_Store
@@ -25,8 +26,4 @@ htmlcov/
 .ipynb_checkpoints/
 
 # === Node / Frontend ===
-node
-.env
-
-
-.ml_artifacts/backend/app/ml/artifacts/
+node_modules/

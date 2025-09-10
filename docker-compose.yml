@@ -1,4 +1,4 @@
-# version: "3.9"  # opțional; poate fi eliminată ca să nu mai apară warning-ul
+# version: "3.9"  # opțional; poți lăsa comentat ca să nu mai apară warning-ul
 
 services:
   api:
@@ -7,7 +7,17 @@ services:
     env_file:
       - .env
     environment:
-      - ML_ART_DIR=/data/ml # artefacte ML persistente în volum
+      # ML artifacts persistente în volum
+      - ML_ART_DIR=/data/ml
+      # ---- din .env (le expunem explicit către container) ----
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - ENV=${ENV}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - db
@@ -16,7 +26,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app # codul backend montat în container
-      - ./ml_artifacts:/data/ml # 👈 artefacte model/vectorizer/meta persistă pe disc
+      - ./ml_artifacts:/data/ml # artefacte model/vectorizer/meta persistă pe disc
 
   db:
     image: postgres:16

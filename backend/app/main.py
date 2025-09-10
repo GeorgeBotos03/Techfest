@@ -4,6 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional, Dict
 
+from fastapi import Body
+from app.services.ai_explain import ai_explain as _ai_explain
+from app.services.ai_quiz import generate_quiz, score_quiz_llm
+from app.services.ai_classify import classify_payment
+
 import csv, io
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -361,3 +366,27 @@ def mule_top(hours: int = Query(24, ge=1, le=168), limit: int = Query(10, ge=1, 
     Top IBAN-uri suspecte ca destinație în fereastra recentă.
     """
     return top_suspects(r, hours=hours, limit=limit)
+
+
+@app.post("/ai/explain")
+def ai_explain_endpoint(payload: dict = Body(...)):
+    features = payload.get("features", {})
+    signals  = payload.get("signals", {})
+    return _ai_explain(features, signals)
+
+@app.post("/ai/quiz")
+def ai_quiz(payload: dict = Body(...)):
+    # payload poate conține signals (din scorePayment / mule / etc.)
+    signals = payload.get("signals", {})
+    return generate_quiz(signals)
+
+@app.post("/ai/quiz/score")
+def ai_quiz_score(payload: dict = Body(...)):
+    questions = payload.get("questions", [])
+    answers   = payload.get("answers", [])
+    score, decision, reasons = score_quiz_llm(questions, answers)
+    return {"score": score, "decision": decision, "reasons": reasons}
+
+@app.post("/ai/classify")
+def ai_classify(payload: dict = Body(...)):
+    return classify_payment(payload.get("features", {}), payload.get("signals", {}))

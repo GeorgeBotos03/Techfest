@@ -8,7 +8,7 @@ export class ApiService {
   private base = 'http://localhost:8000';   // baza pentru backend-ul tău FastAPI
 
   scoreTransaction(payload: any): Observable<any> {
-  return this.http.post(`${this.base}/scorePayment`, payload);
+    return this.http.post(`${this.base}/scorePayment`, payload);
   }
 
   getAssessment(txId: string) {
@@ -42,4 +42,11 @@ export class ApiService {
   getAlerts() {
     return this.http.get(`${this.base}/alerts`);
   }
+  aiExplain(payload: any) { return this.http.post<any>(`${this.base}/ai/explain`, payload); }
+  aiQuiz(payload: any) { return this.http.post<any>(`${this.base}/ai/quiz`, payload); }
+  aiQuizScore(p: any) { return this.http.post<any>(`${this.base}/ai/quiz/score`, p); }
+  aiClassify(p: any) { return this.http.post<any>(`${this.base}/ai/classify`, p); }
 }
+
+
+
