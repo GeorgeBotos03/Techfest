@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 
 import { assessment, tx } from '../../../models/mock-data';
 import { RiskBars } from '../../../ui/risk-bars/risk-bars';
-import { RiskChip } from '../../../ui/risk-chip/risk-chip';
+// import { RiskChip } from '../../../ui/risk-chip/risk-chip';
 
 @Component({
   selector: 'app-enhanced-verification',
@@ -14,7 +14,7 @@ import { RiskChip } from '../../../ui/risk-chip/risk-chip';
     CommonModule,
     FormsModule,
     RouterLink,
-    RiskChip,
+    // RiskChip,
     RiskBars   // ⬅️ ai uitat să-l pui în imports
   ],
   templateUrl: './enhanced-verification.html', // ⬅️ nume clar

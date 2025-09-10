@@ -4,8 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
 import { assessment, checklist } from '../../../models/mock-data';
-import { RiskChip } from '../../../ui/risk-chip/risk-chip';
-import { RiskBars } from '../../../ui/risk-bars/risk-bars';
+// import { RiskChip } from '../../../ui/risk-chip/risk-chip';
+// import { RiskBars } from '../../../ui/risk-bars/risk-bars';
 
 @Component({
   selector: 'app-educational-checkpoint',
@@ -14,8 +14,8 @@ import { RiskBars } from '../../../ui/risk-bars/risk-bars';
     CommonModule,
     FormsModule,
     RouterLink,
-    RiskChip,
-    RiskBars
+    // RiskChip,
+    // RiskBars
   ],
   templateUrl: './educational-checkpoint.html', // convenție Angular
   styleUrls: ['./educational-checkpoint.scss']  // dacă ai fișier de stil

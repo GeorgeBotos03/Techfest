@@ -1,31 +1,36 @@
-import { Component, Input, OnChanges, SimpleChanges, computed, signal } from '@angular/core';
+import { Component, Input } from '@angular/core';
+import { CommonModule } from '@angular/common';
+
+type Bar = { name: string; value: number };
 
 @Component({
-  selector: 'mini-line',
+  selector: 'risk-bars',
   standalone: true,
+  imports: [CommonModule],
   template: `
-<svg [attr.viewBox]="'0 0 ' + width + ' ' + height" style="width:100%;height:100px;">
-<polyline [attr.points]="points()" fill="none" stroke="#6ad1ff" stroke-width="2" />
-</svg>
-`
+<div class="bars" *ngIf="data?.length; else noBars">
+  <div class="bar" *ngFor="let b of data">
+    <div class="name">{{ b.name }}</div>
+    <div class="track">
+      <div class="fill" [style.width.%]="clamp(b.value)"></div>
+    </div>
+    <div class="val">{{ clamp(b.value) | number:'1.0-0' }}%</div>
+  </div>
+</div>
+<ng-template #noBars>
+  <div class="help">No bar data available.</div>
+</ng-template>
+`,
+  styles: [`
+.bars { display:grid; gap:8px; }
+.bar { display:grid; grid-template-columns: 140px 1fr 48px; align-items:center; gap:8px; }
+.name { color: var(--muted); font-size: 13px; }
+.track { height: 10px; background: #0a1118; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.fill { height: 100%; background: linear-gradient(90deg, var(--brand), #6ad1ff); }
+.val { text-align: right; font-size: 12px; color: var(--muted); }
+`]
 })
-
-
 export class RiskBars {
-  @Input() values: number[] = [];
-  width = 300; height = 80; pad = 6;
-  private pts = signal('');
-  points = computed(() => this.pts());
-
-
-  ngOnChanges(_: SimpleChanges) {
-    const { width, height, pad } = this;
-    if (!this.values?.length) { this.pts.set(''); return; }
-    const min = Math.min(...this.values);
-    const max = Math.max(...this.values);
-    const dx = (width - pad * 2) / (this.values.length - 1 || 1);
-    const scaleY = (v: number) => max === min ? height / 2 : height - pad - ((v - min) / (max - min)) * (height - pad * 2);
-    const pts = this.values.map((v, i) => `${pad + i * dx},${scaleY(v)}`).join(' ');
-    this.pts.set(pts);
-  }
+  @Input() data: Bar[] = [];
+  clamp(v: number) { v = Number(v) || 0; return Math.max(0, Math.min(100, v)); }
 }
