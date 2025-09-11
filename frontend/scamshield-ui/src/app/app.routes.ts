@@ -4,12 +4,11 @@ import { EducationalCheckpoint } from './pages/educational-checkpoint/educationa
 import { EnhancedVerification } from './pages/enhanced-verification/enhanced-verification/enhanced-verification';
 import { FinalConfirmation } from './pages/final-confirmation/final-confirmation/final-confirmation';
 
-
 export const routes: Routes = [
-{ path: '', pathMatch: 'full', redirectTo: 'security-check' },
-{ path: 'security-check', component: SecurityCheck },
-{ path: 'educational', component: EducationalCheckpoint },
-{ path: 'enhanced', component: EnhancedVerification },
-{ path: 'final', component: FinalConfirmation },
-{ path: '**', redirectTo: 'security-check' }
+    { path: '', redirectTo: 'security-check', pathMatch: 'full' },
+    { path: 'security-check', component: SecurityCheck },
+    { path: 'educational-checkpoint', component: EducationalCheckpoint },
+    { path: 'enhanced-verification', component: EnhancedVerification },
+    { path: 'final-confirmation', component: FinalConfirmation },
+    { path: '**', redirectTo: 'security-check' },
 ];

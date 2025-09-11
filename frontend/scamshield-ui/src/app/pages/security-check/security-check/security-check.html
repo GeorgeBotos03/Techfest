@@ -7,82 +7,122 @@
       </risk-chip>
     </div>
 
-    <!-- afișaj erori 422 / altele -->
+    <button class="btn" type="button" (click)="generateTransaction()" style="margin-bottom:12px;">
+      Generează tranzacție nouă
+    </button>
+
     <div *ngIf="error()" class="help" style="margin:8px 0; white-space:pre-wrap">
       {{ error() }}
     </div>
 
     <div class="grid" style="grid-template-columns: 1.2fr 1fr; gap:16px;">
+      <!-- ================= Left column: Transaction details ================= -->
       <div class="box">
         <div class="card-sub">Transaction Details</div>
-        <div class="kv"><div class="label">From</div><div>{{ tx?.fromAccount || '—' }}</div></div>
+
+        <div class="kv">
+          <div class="label">From</div>
+          <div>{{ tx.src_account_iban || '—' }}</div>
+        </div>
+
         <div class="kv">
           <div class="label">To</div>
+          <div>{{ tx.dst_account_iban || '—' }}</div>
+        </div>
+
+        <div class="kv">
+          <div class="label">Amount</div>
+          <div>${{ tx.amount || 0 }} {{ tx.currency || '' }}</div>
+        </div>
+
+        <div class="kv">
+          <div class="label">Description</div>
+          <div>{{ tx.description || '—' }}</div>
+        </div>
+
+        <div class="kv">
+          <div class="label">Type</div>
+          <div>{{ tx.channel || '—' }}</div>
+        </div>
+
+        <div class="kv">
+          <div class="label">When</div>
+          <div>{{ tx.ts ? (tx.ts | date:'medium') : '—' }}</div>
+        </div>
+
+        <div class="kv">
+          <div class="label">Device & Location</div>
+          <div>{{ tx.device_fp || '—' }}</div>
+        </div>
+
+        <!-- AI Classification -->
+        <div class="kv" style="margin-top:12px;">
+          <div class="label">AI Classification</div>
           <div>
-            {{ tx?.toRecipient || '—' }}
-            <span class="help" *ngIf="recipient?.reputation === 'unverified'">Unverified recipient</span>
+            <span *ngIf="aiClassification() === 'scam'" class="badge high">Scam</span>
+            <span *ngIf="aiClassification() === 'suspicious'" class="badge med">Suspicious</span>
+            <span *ngIf="aiClassification() === 'safe'" class="badge low">Safe</span>
+            <span *ngIf="aiClassification() && ['scam','suspicious','safe'].indexOf(aiClassification() ?? '') === -1"
+              class="badge">{{ aiClassification() }}</span>
+            <span *ngIf="!aiClassification()">—</span>
           </div>
         </div>
-        <div class="kv"><div class="label">Amount</div><div>${{ (tx?.amount || 0) | number:'1.0-2' }} {{ tx?.currency || '' }}</div></div>
-        <div class="kv"><div class="label">Reference</div><div>{{ tx?.reference || '—' }}</div></div>
-        <div class="kv"><div class="label">Type</div><div>{{ tx?.type ? (tx.type | titlecase) : '—' }}</div></div>
-        <div class="kv"><div class="label">When</div><div>{{ tx?.date ? (tx.date | date:'medium') : '—' }}</div></div>
-        <div class="kv"><div class="label">Device & Location</div><div>{{ tx?.device || '—' }} — {{ tx?.location || '—' }}</div></div>
       </div>
 
+      <!-- ================= Right column: AI Risk Assessment ================= -->
       <div class="box">
         <div class="card-sub">AI Risk Assessment</div>
-        <ng-container *ngIf="assessment?.reasons?.length; else noReasons">
-          <div class="list">
-            <div class="item" *ngFor="let r of assessment?.reasons">
-              <div class="dot"></div>
-              <div>
-                <strong>{{ r?.title || 'Reason' }}</strong>
-                <div class="card-sub">{{ r?.desc || '' }}</div>
-              </div>
-            </div>
+
+        <!-- folosim alias cu *ngIf ca să evităm TS2531 (null) -->
+        <ng-container *ngIf="aiRiskResult() as ai; else noAiRisk">
+          <div><strong>Summary:</strong> {{ ai.summary }}</div>
+
+          <div *ngIf="ai.key_reasons?.length">
+            <strong>Key Reasons:</strong>
+            <ul>
+              <li *ngFor="let reason of ai.key_reasons">{{ reason }}</li>
+            </ul>
+          </div>
+
+          <div *ngIf="ai.recommendations?.length">
+            <strong>Recommendations:</strong>
+            <ul>
+              <li *ngFor="let tip of ai.recommendations">{{ tip }}</li>
+            </ul>
           </div>
         </ng-container>
-        <ng-template #noReasons>
-          <div class="help">No risk reasons available yet.</div>
+
+        <ng-template #noAiRisk>
+          <div class="help">No AI risk assessment available yet.</div>
         </ng-template>
-      </div>
-    </div>
-
-    <div class="separator"></div>
-
-    <div class="grid" style="grid-template-columns: 1.2fr 1fr; gap:16px;">
-      <div class="box">
-        <div class="card-sub">Transaction Pattern</div>
-        <mini-line [values]="pattern?.history || []"></mini-line>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px;">
-          <div class="help">Avg: ${{ pattern?.typicalAvg ?? '—' }}</div>
-          <div class="help">Largest Prev: ${{ pattern?.largest ?? '—' }}</div>
-          <div class="help">Current: ${{ pattern?.current ?? '—' }}</div>
-        </div>
-      </div>
-
-      <div class="box">
-        <div class="card-sub">ScamShield Protection</div>
-        <div class="list">
-          <div class="item"><div class="dot"></div><div>Real-time transaction monitoring</div></div>
-          <div class="item"><div class="dot"></div><div>Recipient verification</div></div>
-          <div class="item"><div class="dot"></div><div>Refund eligibility review</div></div>
-        </div>
-        <div style="margin-top:12px;display:flex;gap:8px;">
-          <a class="btn ghost" routerLink="/educational">Continue</a>
-          <button class="btn" type="button">View Detailed Analysis</button>
-        </div>
       </div>
     </div>
   </section>
 
+  <!-- ================= Aside: Recipient info ================= -->
   <aside class="card">
     <div class="card-title">Recipient Information</div>
-    <div class="kv"><div class="label">Name</div><div>{{ recipient?.name || '—' }}</div></div>
-    <div class="kv"><div class="label">CUI</div><div>{{ recipient?.cui || '—' }}</div></div>
-    <div class="kv"><div class="label">Address</div><div>{{ recipient?.address || '—' }}</div></div>
-    <div class="kv"><div class="label">Incorporated</div><div>{{ recipient?.incorporated ? (recipient.incorporated | date) : '—' }}</div></div>
+
+    <div class="kv">
+      <div class="label">Name</div>
+      <div>{{ recipient?.name || '—' }}</div>
+    </div>
+
+    <div class="kv">
+      <div class="label">CUI</div>
+      <div>{{ recipient?.cui || '—' }}</div>
+    </div>
+
+    <div class="kv">
+      <div class="label">Address</div>
+      <div>{{ recipient?.address || '—' }}</div>
+    </div>
+
+    <div class="kv">
+      <div class="label">Incorporated</div>
+      <div>{{ recipient?.incorporated ? (recipient.incorporated | date) : '—' }}</div>
+    </div>
+
     <div class="kv">
       <div class="label">Reputation</div>
       <div>
@@ -91,6 +131,7 @@
         <span class="badge high" *ngIf="recipient?.reputation === 'blacklist'">On Watchlist</span>
       </div>
     </div>
+
     <div class="separator"></div>
     <div class="help">This recipient has characteristics common to invoice scams.</div>
   </aside>

@@ -4,20 +4,24 @@ from __future__ import annotations
 import os
 import json
 from typing import Any, Dict, Optional, Tuple
+from dotenv import load_dotenv
 
-# Config din env
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+# Încarcă variabilele din .env din root-ul proiectului
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../../.env'))
+
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 _client: Optional[Any] = None
 
-# Inițializare client OpenAI (opțional; dacă lipsește cheia facem fallback)
+# Inițializare client OpenAI (fallback dacă lipsește cheia)
 try:
     if OPENAI_API_KEY:
-        from openai import OpenAI
-        _client = OpenAI(api_key=OPENAI_API_KEY)
+        import openai
+        openai.api_key = OPENAI_API_KEY
+        _client = openai
 except Exception:
-    _client = None  # nu cădem; lăsăm fallback pe stratul superior
+    _client = None  # fallback pe stratul superior
 
 
 def get_openai_client() -> Tuple[Optional[Any], str]:
@@ -72,14 +76,14 @@ def explain_with_llm(features: Dict[str, Any], signals: Dict[str, Any]) -> Dict[
         user = "Features:\n" + json.dumps(features, ensure_ascii=False) + \
                "\nSignals:\n" + json.dumps(signals, ensure_ascii=False)
 
-        resp = _client.chat.completions.create(
+        resp = _client.ChatCompletion.create(
             model=OPENAI_MODEL,
             messages=[{"role": "system", "content": sys},
                       {"role": "user", "content": user}],
             temperature=0.2,
-            response_format={"type": "json_object"},
+            max_tokens=256
         )
-        content = (resp.choices[0].message.content or "").strip()
+        content = (resp.choices[0].message.get('content', '') or "").strip()
         out = json.loads(content)
         if not isinstance(out, dict) or "summary" not in out:
             raise ValueError("Unexpected JSON shape")

@@ -1,9 +1,9 @@
-import { Component } from '@angular/core';
-import { assessment, tx } from '../../../models/mock-data';
-import { RiskChip } from '../../../ui/risk-chip/risk-chip';
-import { FormsModule } from '@angular/forms';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { RouterLink, Router } from '@angular/router';
+import { RiskChip } from '../../../ui/risk-chip/risk-chip';
+import { TransactionStateService } from '../../../data/transaction-state.service';
 
 @Component({
   selector: 'app-final-confirmation',
@@ -11,8 +11,18 @@ import { RouterLink } from '@angular/router';
   imports: [CommonModule, FormsModule, RouterLink, RiskChip],
   templateUrl: './final-confirmation.html'
 })
-
 export class FinalConfirmation {
-  tx = tx; reasons = assessment.reasons; level = 'medium' as const;
+  private router = inject(Router);
+  private state = inject(TransactionStateService);
+
+  tx = this.state.getTransaction();
+  assessment = this.state.getAssessment();
+  level = (this.assessment?.level ?? 'medium');
   confirmed = false;
+
+  ngOnInit() {
+    if (!this.state.hasTransaction()) {
+      this.router.navigate(['/security-check']);
+    }
+  }
 }

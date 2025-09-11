@@ -1,10 +1,8 @@
-// src/app/pages/security-check/security-check/security-check.component.ts
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../../data/api.service';
-
-// UI
+import { TransactionStateService } from '../../../data/transaction-state.service';
 import { RiskChip } from '../../../ui/risk-chip/risk-chip';
 import { MiniLineChart } from '../../../ui/mini-line-chart/mini-line-chart';
 
@@ -13,132 +11,134 @@ type VM = {
   recipient: any;
   pattern: any;
   assessment: {
-    level?: string;
-    overall?: number | string;
+    level?: 'low' | 'medium' | 'high' | 'unknown';
+    overall?: number;
     reasons: Array<{ title?: string; desc?: string }>;
   };
 };
+
+type AIRiskResult = { summary: string; key_reasons: string[]; recommendations: string[] };
+
+function randomTransaction() {
+  const amounts = [2450, 120, 5000, 320, 780];
+  const channels = ['web', 'mobile', 'branch'] as const;
+  const descriptions = [
+    'urgent crypto investment', 'invoice payment', 'family support', 'loan repayment', 'gift for friend'
+  ];
+  return {
+    amount: amounts[Math.floor(Math.random() * amounts.length)],
+    channel: channels[Math.floor(Math.random() * channels.length)],
+    description: descriptions[Math.floor(Math.random() * descriptions.length)],
+    src_account_iban: 'RO49AAAA1B31007593840000',
+    dst_account_iban: 'RO49BBBB1B31007593840001',
+    is_first_to_payee: Math.random() > 0.5,
+    ts: new Date().toISOString(),
+    currency: 'RON',
+    device_fp: 'demo-device',
+  };
+}
 
 @Component({
   selector: 'app-security-check',
   standalone: true,
   imports: [CommonModule, RouterLink, RiskChip, MiniLineChart],
-  templateUrl: './security-check.html'
+  templateUrl: './security-check.html',
 })
 export class SecurityCheck {
   private api = inject(ApiService);
+  private state = inject(TransactionStateService);
+  private router = inject(Router);
 
   loading = signal(true);
-  error   = signal<string | null>(null);
+  error = signal<string | null>(null);
 
   private _vm = signal<VM>({
-    tx: {},
-    recipient: {},
-    pattern: {},
-    assessment: { level: 'unknown', overall: 0, reasons: [] }
+    tx: {}, recipient: {}, pattern: {},
+    assessment: { level: 'unknown', overall: 0, reasons: [] },
   });
 
-  ngOnInit() {
-    // === PAYLOAD FLAT cu câmpurile cerute (din 422):
-    // ts, channel, src_account_iban, dst_account_iban
-    const nowEpoch = Math.floor(Date.now() / 1000);
+  aiRiskResult = signal<AIRiskResult | null>(null);
+  aiClassification = signal<string | null>(null);
 
-    const payload: any = {
-      ts: nowEpoch,                          // dacă modelul vrea ISO -> new Date().toISOString()
-      channel: 'web',                        // web | mobile | api (alege ce ai în backend)
-      src_account_iban: 'RO49AAAA1B31007593840000',
-      dst_account_iban: 'RO49AAAA1B31007593840000',
+  ngOnInit() { this.reloadTransaction(); }
 
-      // restul câmpurilor (de obicei acceptate ca opționale)
-      amount:   2450,
-      currency: 'USD',
-      reference:'Software Services',
-      tx_type:  'vendor',                    // dacă modelul tău e 'type', schimbă în 'type'
-      device:   'Chrome on Windows',
-      location: 'Bucharest, RO',
-
-      // identitate destinatar (dacă backendul le ignoră, nu deranjează)
-      to_name:  'Global Tech Solutions Ltd.',
-      to_cui:   'HRB 112233',
-
-      // module (snake_case dacă așa e în /docs)
-      features: {
-        rules: true,
-        text_signals: true,
-        velocity: true,
-        cop: true,
-        watchlist: true
-      }
-    };
+  reloadTransaction() {
+    this.loading.set(true); this.error.set(null);
+    const payload = randomTransaction();
 
     this.api.scoreTransaction(payload).subscribe({
       next: (res: any) => {
         const assessment = {
-          level:   res?.risk?.level ?? res?.assessment?.level ?? 'unknown',
-          overall: res?.risk?.scorePct ?? res?.assessment?.overall ?? res?.score ?? 0,
-          reasons: (res?.risk?.reasons ?? res?.assessment?.reasons ?? res?.reasons ?? [])
-            .map((r: any) => ({ title: r?.title, desc: r?.desc ?? r?.description ?? '' }))
+          level: (res.level as VM['assessment']['level']) || 'unknown',
+          overall: (res.score as number) || 0,
+          reasons: (res.reasons || []).map((r: string) => ({ title: r, desc: '' })),
         };
 
-        this._vm.set({
-          // reconstruim view modelul din payload (dacă API nu returnează tx complet)
-          tx: {
-            fromAccount: payload.src_account_iban,
-            toRecipient: payload.to_name || payload.dst_account_iban,
-            amount: payload.amount,
-            currency: payload.currency,
-            reference: payload.reference,
-            type: payload.tx_type || payload.type,
-            date: new Date(
-              typeof payload.ts === 'number' ? payload.ts * 1000 : Date.parse(payload.ts)
-            ).toISOString(),
-            device: payload.device,
-            location: payload.location
+        // 1) UI local
+        this._vm.set({ tx: payload, recipient: {}, pattern: {}, assessment });
+        this.loading.set(false);
+
+        // 2) salvează în store pt. paginile următoare
+        this.state.setTransaction(payload);
+        this.state.setAssessment(assessment as any);
+
+        const features = {
+          amount: payload.amount, channel: payload.channel,
+          description: payload.description,
+          src_account_iban: payload.src_account_iban,
+          dst_account_iban: payload.dst_account_iban,
+        };
+        const signals = {
+          cop_ok: res.cop_ok ?? true,
+          mule_score: res.mule_score ?? 0,
+          watchlisted: res.watchlisted ?? false,
+          ml_p: res.ml_p ?? 0,
+        };
+
+        // 3) AI Explain
+        this.api.aiExplain({ features, signals }).subscribe({
+          next: (aiRes: AIRiskResult) => {
+            const cleaned = {
+              summary: aiRes?.summary ?? 'No AI assessment available.',
+              key_reasons: aiRes?.key_reasons ?? [],
+              recommendations: aiRes?.recommendations ?? [],
+            };
+            this.aiRiskResult.set(cleaned);
+            this.state.setAiExplain(cleaned);   // <-- salvat pt. celelalte pagini
           },
-          recipient: res?.recipient ?? {
-            name: payload.to_name || '(IBAN) ' + payload.dst_account_iban,
-            cui:  payload.to_cui || '',
-            reputation: 'unverified'
-          },
-          pattern:   res?.pattern ?? {},
-          assessment
+          error: () => {
+            const fb = { summary: 'AI unavailable', key_reasons: [], recommendations: [] };
+            this.aiRiskResult.set(fb);
+            this.state.setAiExplain(fb);
+          }
         });
-        this.loading.set(false);
+
+        // 4) AI Classify
+        this.api.aiClassify({ features, signals }).subscribe({
+          next: (classRes: any) => {
+            const c = classRes?.classification ?? null;
+            this.aiClassification.set(c);
+            this.state.setAiClass(c);           // <-- salvat pt. celelalte pagini
+          },
+          error: () => { this.aiClassification.set(null); this.state.setAiClass(null); }
+        });
       },
-      error: (e) => {
-        // afișăm clar ce câmpuri lipsesc
-        const detail = (e?.error?.detail ?? []) as Array<any>;
-        if (Array.isArray(detail) && detail.length) {
-          console.table(detail.map(x => ({
-            field: Array.isArray(x.loc) ? x.loc.slice(1).join('.') : (x.loc ?? ''),
-            msg: x.msg
-          })));
-          this.error.set(
-            detail.map(x => `${Array.isArray(x.loc) ? x.loc.slice(1).join('.') : x.loc}: ${x.msg}`).join('\n')
-          );
-        } else {
-          this.error.set(e?.message || 'Request failed');
-        }
-        this.loading.set(false);
-      }
+      error: () => { this.error.set('Eroare la scor clasic'); this.loading.set(false); }
     });
   }
 
-  // === getters pentru template ===
-  get tx()         { return this._vm().tx; }
-  get recipient()  { return this._vm().recipient; }
-  get pattern()    { return this._vm().pattern; }
+  // helpers pt. template
+  get tx() { return this._vm().tx; }
   get assessment() { return this._vm().assessment; }
-
-  // === garantăm tipul cerut de <risk-chip> ===
   get riskLevel(): 'low' | 'medium' | 'high' {
-    const lvl = (this._vm().assessment.level || '').toLowerCase();
-    if (lvl.includes('low')) return 'low';
-    if (lvl.includes('med')) return 'medium';
-    if (lvl.includes('high')) return 'high';
-    const score = Number(this._vm().assessment.overall) || 0;
-    if (score >= 75) return 'high';
-    if (score >= 40) return 'medium';
+    const lvl = this.assessment.level;
+    if (lvl === 'high') return 'high';
+    if (lvl === 'medium') return 'medium';
     return 'low';
   }
+  get aiSummary(): string { return this.aiRiskResult()?.summary ?? '—'; }
+
+  // navigare
+  goEducational() { this.router.navigate(['/educational-checkpoint']); }
+  goEnhanced() { this.router.navigate(['/enhanced-verification']); }
 }
